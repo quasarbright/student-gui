@@ -3,6 +3,7 @@
 ; module interface
 
 (module+ test (require rackunit))
+(module+ main)
 (provide big-bang-ui)
 
 ; dependencies
@@ -16,12 +17,16 @@
 (struct text [str] #:transparent)
 (struct button [label action] #:transparent)
 (struct beside% [guis] #:transparent)
+(struct above% [guis] #:transparent)
 ; A GUI is one of
 #;(text string?)
 #;(button string? any/c)
-#;(beside (listof GUI))
+#;(beside GUI ...)
+#;(above GUI ...)
 
+; convenience constructors for list-like guis
 (define (beside . guis) (beside% guis))
+(define (above . guis) (above% guis))
 
 ; A WorldState is the global state of the application. It is a student-defined data type like in big-bang
 
@@ -39,30 +44,78 @@
      #'(big-bang-ui/proc initial-state draw-world handle-action)]))
 
 #;(WorldState (WorldState -> GUI) (Action WorldState -> WorldState) -> WorldState)
-; display a gui with the given renderer and action handler
+; display a gui with the given renderer and optional action handler
 (define (big-bang-ui/proc initial-state draw-world handle-action)
   (define @world-state (obs initial-state))
   (define @world-states (obs-map @world-state list))
   (render (window
-           #:min-size '(#f 100)
+           #:min-size '(200 100)
            ; use list view just to get
            (list-view @world-states #:key identity (λ (ws @ws) (gui->view (draw-world ws) @world-state handle-action)))))
-  ; TODO return final state
+  ; TODO figure out how to return final state
   )
 
 #;(GUI obs? (Action WorldState -> WorldState) (is-a/c view<%>))
+; render a GUI as a gui-easy view so it can be displayed
 (define (gui->view gui @world-state handle-action)
+  (define (recur gui) (gui->view gui @world-state handle-action))
   (match gui
     [(button label action) (easy:button label (λ () (obs-update! @world-state (λ (ws) (handle-action action ws)))))]
     [(text str) (easy:text str)]
-    [(beside% guis) (apply hpanel (for/list ([gui guis])
-                                   (gui->view gui @world-state handle-action)))]))
+    [(beside% guis) (apply hpanel (map recur guis))]
+    [(above% guis) (apply vpanel (map recur guis))]))
+
+#;(GUI GUI -> boolean?)
+; are the two GUIs the same?
+; Ignores behavior, just looks at structure and and content.
+(define (gui=? gui1 gui2)
+  ; TODO flatten trees of beside, above? Should (beside (beside a b) c) be the same as (beside a b c)?
+  (match* (gui1 gui2)
+    ; match will assert that the two labels are equal?
+    [((button label _) (button label _)) #t]
+    [((text str) (text str)) #t]
+    [((beside% guis1) (beside% guis2)) (guis=? guis1 guis2)]
+    [((above% guis1) (above% guis2)) (guis=? guis1 guis2)]
+    [(_ _) #f]))
+
+
+#;((listof GUI) (listof GUI) -> boolean?)
+; are the two lists of GUIs the same? (according to gui=?)
+(define (guis=? guis1 guis2)
+  (and (= (length guis1) (length guis2))
+       (for/and ([gui1 guis1]
+                 [gui2 guis2])
+         (gui=? gui1 gui2))))
+
+; main
+
+(module+ main
+  ; counter
+  (big-bang-ui 0
+               [to-draw (λ (n) (above (text "counter")
+                                      (beside (text (number->string n)) (button "+" 'add1))))]
+               [on-action (λ (action n) (match action ['add1 (add1 n)]))]))
 
 ; testing
 
-; counter
-(big-bang-ui 1
-             [to-draw (λ (n) (beside (text (number->string n)) (button "+" 'add1)))]
-             [on-action (λ (action n) (match action ['add1 (add1 n)]))])
 
-(module+ test)
+(module+ test
+  (check-true (gui=? (button "foo" #t) (button "foo" #f)))
+  (check-false (gui=? (button "foo" #t) (button "bar" #f)))
+  (check-false (gui=? (button "foo" #f) (text "foo")))
+  (check-true (gui=? (text "foo") (text "foo")))
+  (check-false (gui=? (text "foo") (text "bar")))
+  (check-true (gui=? (beside (text "foo") (text "bar"))
+                     (beside (text "foo") (text "bar"))))
+  (check-false (gui=? (beside (text "foo") (text "bar"))
+                     (beside (text "bar") (text "foo"))))
+  (check-false (gui=? (beside (text "foo") (text "bar"))
+                      (text "bar")))
+  (check-false (gui=? (beside (text "foo") (text "bar"))
+                      (beside (text "foo") (text "bar") (text "baz"))))
+  (check-true (gui=? (beside) (beside)))
+  (check-true (gui=? (above) (above)))
+  (check-true (gui=? (above (text "foo") (text "bar"))
+                     (above (text "foo") (text "bar"))))
+  (check-false (gui=? (above (text "foo") (text "bar"))
+                      (beside (text "foo") (text "bar")))))
