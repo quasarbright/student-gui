@@ -4,11 +4,21 @@
 
 (module+ test (require rackunit))
 (module+ main)
-(provide big-bang-ui)
+(provide big-bang-ui
+         (contract-out
+          ; GUI components
+          [text (-> string? gui?)]
+          [button (-> string? any/c gui?)]
+          [beside (->* () #:rest (listof gui?) gui?)]
+          [above (->* () #:rest (listof gui?) gui?)]
+          ; GUI operations
+          [gui? (-> any/c boolean?)]
+          [gui=? (-> any/c any/c boolean?)]))
 
 ; dependencies
 
 (require racket/gui/easy
+         ; So I can shadow `button` and use easy button to render it
          (prefix-in easy: racket/gui/easy)
          (for-syntax syntax/parse))
 
@@ -27,6 +37,9 @@
 ; convenience constructors for list-like guis
 (define (beside . guis) (beside% guis))
 (define (above . guis) (above% guis))
+
+; Predicate for GUI
+(define gui? (or/c text? button? beside%? above%?))
 
 ; A WorldState is the global state of the application. It is a student-defined data type like in big-bang
 
@@ -78,7 +91,6 @@
     [((above% guis1) (above% guis2)) (guis=? guis1 guis2)]
     [(_ _) #f]))
 
-
 #;((listof GUI) (listof GUI) -> boolean?)
 ; are the two lists of GUIs the same? (according to gui=?)
 (define (guis=? guis1 guis2)
@@ -96,8 +108,7 @@
                                       (beside (text (number->string n)) (button "+" 'add1))))]
                [on-action (λ (action n) (match action ['add1 (add1 n)]))]))
 
-; testing
-
+; tests
 
 (module+ test
   (check-true (gui=? (button "foo" #t) (button "foo" #f)))
