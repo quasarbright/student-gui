@@ -9,6 +9,7 @@
           ; GUI components
           [text (-> string? gui?)]
           [button (-> string? any/c gui?)]
+          [text-input (-> string? (-> string any/c) gui?)]
           [beside (->* () #:rest (listof gui?) gui?)]
           [above (->* () #:rest (listof gui?) gui?)]
           ; GUI operations
@@ -41,7 +42,7 @@
 (define (above . guis) (above% guis))
 
 ; Predicate for GUI
-(define gui? (or/c text? button? beside%? above%?))
+(define gui? (or/c text? button? text-input? beside%? above%?))
 
 ; A WorldState is the global state of the application. It is a student-defined data type like in big-bang
 
