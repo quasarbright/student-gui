@@ -26,11 +26,13 @@
 
 (struct text [str] #:transparent)
 (struct button [label action] #:transparent)
+(struct text-input [label on-submit] #:transparent)
 (struct beside% [guis] #:transparent)
 (struct above% [guis] #:transparent)
 ; A GUI is one of
 #;(text string?)
-#;(button string? any/c)
+#;(button string? Action)
+#;(text-input string? (string -> Action))
 #;(beside GUI ...)
 #;(above GUI ...)
 
@@ -72,8 +74,18 @@
 ; render a GUI as a gui-easy view so it can be displayed
 (define (gui->view gui @world-state handle-action)
   (define (recur gui) (gui->view gui @world-state handle-action))
+  (define (dispatch action) (obs-update! @world-state (λ (ws) (handle-action action ws))))
   (match gui
-    [(button label action) (easy:button label (λ () (obs-update! @world-state (λ (ws) (handle-action action ws)))))]
+    [(button label action) (easy:button label (λ () (dispatch action)))]
+    [(text-input label on-submit)
+     (define @input-value (obs ""))
+     (hpanel (input @input-value
+                    (λ (type input-value)
+                      (when (eq? type 'return) (dispatch (on-submit input-value)))
+                      ; not sure if this is necessary
+                      (obs-update! @input-value (λ (_) input-value)))
+                    #:label label)
+             (easy:button "submit" (λ () (dispatch (on-submit (obs-peek @input-value))))))]
     [(text str) (easy:text str)]
     [(beside% guis) (apply hpanel (map recur guis))]
     [(above% guis) (apply vpanel (map recur guis))]))
@@ -86,6 +98,7 @@
   (match* (gui1 gui2)
     ; match will assert that the two labels are equal?
     [((button label _) (button label _)) #t]
+    [((text-input label _) (text-input label _)) #t]
     [((text str) (text str)) #t]
     [((beside% guis1) (beside% guis2)) (guis=? guis1 guis2)]
     [((above% guis1) (above% guis2)) (guis=? guis1 guis2)]
@@ -103,10 +116,20 @@
 
 (module+ main
   ; counter
+  ; A WorldState is a Natural
+  ; An Action is 'add1
+  #;
   (big-bang-ui 0
                [to-draw (λ (n) (above (text "counter")
                                       (beside (text (number->string n)) (button "+" 'add1))))]
-               [on-action (λ (action n) (match action ['add1 (add1 n)]))]))
+               [on-action (λ (action n) (match action ['add1 (add1 n)]))])
+  ; input updates label
+  ; A WorldState is a String for the current label.
+  ; An Action is a String that replaces the WorldState
+  (big-bang-ui "initial"
+               [to-draw (λ (str) (above (text str)
+                                        (text-input "enter a string" (λ (new-str) new-str))))]
+               [on-action (λ (new-str old-str) new-str)]))
 
 ; tests
 
@@ -116,6 +139,12 @@
   (check-false (gui=? (button "foo" #f) (text "foo")))
   (check-true (gui=? (text "foo") (text "foo")))
   (check-false (gui=? (text "foo") (text "bar")))
+  (check-true (gui=? (text-input "foo" (const #f))
+                     (text-input "foo" (const #f))))
+  (check-false (gui=? (text-input "foo" (const #f))
+                     (text-input "bar" (const #f))))
+  (check-false (gui=? (text-input "foo" (const #f))
+                      (text "foo")))
   (check-true (gui=? (beside (text "foo") (text "bar"))
                      (beside (text "foo") (text "bar"))))
   (check-false (gui=? (beside (text "foo") (text "bar"))
