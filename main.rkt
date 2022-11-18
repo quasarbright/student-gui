@@ -9,7 +9,7 @@
           ; GUI components
           [text (-> string? gui?)]
           [button (-> string? any/c gui?)]
-          [text-input (-> string? (-> string any/c) gui?)]
+          [text-input (-> string? (-> string? any/c) gui?)]
           [beside (->* () #:rest (listof gui?) gui?)]
           [above (->* () #:rest (listof gui?) gui?)]
           ; GUI operations
